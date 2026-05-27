@@ -3,6 +3,7 @@
 use App\Core\Router;
 use App\Controllers\AuthController;
 use App\Controllers\TaskController;
+use App\Controllers\AttachmentController;
 use App\Middleware\AuthMiddleware;
 
 $router = new Router();
@@ -16,5 +17,9 @@ $router->get('/api/tasks/{id}', [TaskController::class, 'show'], [AuthMiddleware
 $router->post('/api/tasks', [TaskController::class, 'store'], [AuthMiddleware::class]);
 $router->put('/api/tasks/{id}', [TaskController::class, 'update'], [AuthMiddleware::class]);
 $router->delete('/api/tasks/{id}', [TaskController::class, 'destroy'], [AuthMiddleware::class]);
+
+$router->post('/api/tasks/{id}/attachments', [AttachmentController::class, 'upload'], [AuthMiddleware::class]);
+$router->get('/api/attachments/{id}/download', [AttachmentController::class, 'download'], [AuthMiddleware::class]);
+$router->delete('/api/attachments/{id}', [AttachmentController::class, 'destroy'], [AuthMiddleware::class]);
 
 return $router;

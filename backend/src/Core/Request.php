@@ -103,4 +103,33 @@ class Request
         }
         return null;
     }
+
+    public function file(string $key): ?array
+    {
+        return $_FILES[$key] ?? null;
+    }
+
+    public function files(string $key): array
+    {
+        if (!isset($_FILES[$key])) {
+            return [];
+        }
+
+        $file = $_FILES[$key];
+        if (!is_array($file['name'])) {
+            return [$file];
+        }
+
+        $files = [];
+        for ($i = 0; $i < count($file['name']); $i++) {
+            $files[] = [
+                'name' => $file['name'][$i],
+                'type' => $file['type'][$i],
+                'tmp_name' => $file['tmp_name'][$i],
+                'error' => $file['error'][$i],
+                'size' => $file['size'][$i],
+            ];
+        }
+        return $files;
+    }
 }
