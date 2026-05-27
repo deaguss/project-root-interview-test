@@ -53,11 +53,6 @@ class AttachmentController
             Response::error('Failed to save file', 500);
         }
 
-        // Generate thumbnail for images
-        if (strpos($file['type'], 'image/') === 0) {
-            $this->generateThumbnail($filePath, $file['type']);
-        }
-
         $stmt = $this->db->prepare(
             'INSERT INTO task_attachments (task_id, file_name, file_path, file_size, mime_type)
              VALUES (:task_id, :file_name, :file_path, :file_size, :mime_type)'
@@ -71,7 +66,15 @@ class AttachmentController
             'mime_type' => $file['type'],
         ]);
 
-        $attachmentId = $this->db->lastInsertId();
+        $attachmentId = (int) $this->db->lastInsertId();
+
+        // Queue File Processing (Thumbnail & Virus Scan simulation)
+        $queue = new \App\Core\Queue();
+        $queue->push(\App\Jobs\ProcessFileJob::class, [
+            'attachment_id' => $attachmentId,
+            'file_path' => $dbPath,
+            'mime_type' => $file['type']
+        ]);
         
         $stmt = $this->db->prepare('SELECT * FROM task_attachments WHERE id = :id');
         $stmt->execute(['id' => $attachmentId]);
@@ -157,72 +160,5 @@ class AttachmentController
         }
 
         return $errors;
-    }
-    
-    private function generateThumbnail(string $filePath, string $mimeType): void
-    {
-        $maxWidth = 150;
-        $maxHeight = 150;
-        
-        list($width, $height) = getimagesize($filePath);
-        
-        $ratio = min($maxWidth / $width, $maxHeight / $height);
-        $newWidth = (int) ($width * $ratio);
-        $newHeight = (int) ($height * $ratio);
-        
-        $thumb = imagecreatetruecolor($newWidth, $newHeight);
-        
-        // Handle transparency
-        if ($mimeType === 'image/png' || $mimeType === 'image/webp') {
-            imagealphablending($thumb, false);
-            imagesavealpha($thumb, true);
-            $transparent = imagecolorallocatealpha($thumb, 255, 255, 255, 127);
-            imagefilledrectangle($thumb, 0, 0, $newWidth, $newHeight, $transparent);
-        }
-        
-        $source = null;
-        switch ($mimeType) {
-            case 'image/jpeg':
-                $source = imagecreatefromjpeg($filePath);
-                break;
-            case 'image/png':
-                $source = imagecreatefrompng($filePath);
-                break;
-            case 'image/gif':
-                $source = imagecreatefromgif($filePath);
-                break;
-            case 'image/webp':
-                if (function_exists('imagecreatefromwebp')) {
-                    $source = imagecreatefromwebp($filePath);
-                }
-                break;
-        }
-        
-        if ($source) {
-            imagecopyresampled($thumb, $source, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
-            
-            $thumbPath = dirname($filePath) . '/thumb_' . basename($filePath);
-            
-            switch ($mimeType) {
-                case 'image/jpeg':
-                    imagejpeg($thumb, $thumbPath, 85);
-                    break;
-                case 'image/png':
-                    imagepng($thumb, $thumbPath, 8);
-                    break;
-                case 'image/gif':
-                    imagegif($thumb, $thumbPath);
-                    break;
-                case 'image/webp':
-                    if (function_exists('imagewebp')) {
-                        imagewebp($thumb, $thumbPath, 85);
-                    }
-                    break;
-            }
-            
-            imagedestroy($source);
-        }
-        
-        imagedestroy($thumb);
     }
 }

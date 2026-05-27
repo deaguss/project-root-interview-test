@@ -259,6 +259,41 @@ class TaskController
         Response::success(null, 'Task deleted');
     }
 
+    public function bulkUpdate(Request $request, array $params): void
+    {
+        $taskIds = $request->input('task_ids');
+        $status = $request->input('status');
+
+        if (empty($taskIds) || !is_array($taskIds)) {
+            Response::error('task_ids array is required', 422);
+        }
+
+        if (!$status) {
+            Response::error('status is required', 422);
+        }
+
+        $queue = new \App\Core\Queue();
+        $queue->push(\App\Jobs\BulkTaskStatusJob::class, [
+            'task_ids' => $taskIds,
+            'status' => $status
+        ]);
+
+        Response::success(null, 'Bulk status update job queued', 202);
+    }
+
+    public function export(Request $request, array $params): void
+    {
+        $authUser = $GLOBALS['auth_user'];
+        
+        $queue = new \App\Core\Queue();
+        $queue->push(\App\Jobs\DataExportJob::class, [
+            'user_id' => $authUser->sub,
+            'user_email' => $authUser->email
+        ]);
+
+        Response::success(null, 'Data export job queued. You will receive an email when it is ready.', 202);
+    }
+
     private function findTask($id): array
     {
         $stmt = $this->db->prepare(

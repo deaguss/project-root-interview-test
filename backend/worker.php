@@ -61,7 +61,6 @@ while (true) {
 
                 $jobInstance->handle($data);
 
-                // Success, remove job
                 $deleteStmt = $db->prepare('DELETE FROM jobs WHERE id = :id');
                 $deleteStmt->execute(['id' => $job['id']]);
                 
@@ -71,7 +70,6 @@ while (true) {
                 echo "[{$now}] Job ID {$job['id']} failed: " . $e->getMessage() . "\n";
                 
                 if ($job['attempts'] >= 3) {
-                    // Move to failed jobs
                     $failStmt = $db->prepare(
                         'INSERT INTO failed_jobs (queue, payload, exception) VALUES (:queue, :payload, :exception)'
                     );
@@ -85,7 +83,6 @@ while (true) {
                     $deleteStmt->execute(['id' => $job['id']]);
                     echo "[{$now}] Job ID {$job['id']} permanently failed.\n";
                 } else {
-                    // Release back to queue with delay
                     $releaseStmt = $db->prepare('UPDATE jobs SET reserved_at = NULL, available_at = :available_at WHERE id = :id');
                     $releaseStmt->execute(['available_at' => time() + 60, 'id' => $job['id']]);
                 }

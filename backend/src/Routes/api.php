@@ -13,6 +13,8 @@ $router->post('/api/auth/logout', [AuthController::class, 'logout'], [AuthMiddle
 $router->get('/api/auth/me', [AuthController::class, 'me'], [AuthMiddleware::class]);
 
 $router->get('/api/tasks', [TaskController::class, 'index'], [AuthMiddleware::class]);
+$router->post('/api/tasks/bulk-status', [TaskController::class, 'bulkUpdate'], [AuthMiddleware::class]);
+$router->post('/api/tasks/export', [TaskController::class, 'export'], [AuthMiddleware::class]);
 $router->get('/api/tasks/{id}', [TaskController::class, 'show'], [AuthMiddleware::class]);
 $router->post('/api/tasks', [TaskController::class, 'store'], [AuthMiddleware::class]);
 $router->put('/api/tasks/{id}', [TaskController::class, 'update'], [AuthMiddleware::class]);
