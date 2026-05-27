@@ -35,9 +35,13 @@ while (true) {
     
     $stmt = $db->prepare('SELECT COUNT(*) as count FROM tasks WHERE UNIX_TIMESTAMP(updated_at) >= :last_checked');
     $stmt->execute(['last_checked' => $lastChecked]);
-    $result = $stmt->fetch();
+    $tasksResult = $stmt->fetch();
     
-    if ($result && $result['count'] > 0) {
+    $stmtComments = $db->prepare('SELECT COUNT(*) as count FROM task_comments WHERE UNIX_TIMESTAMP(created_at) >= :last_checked');
+    $stmtComments->execute(['last_checked' => $lastChecked]);
+    $commentsResult = $stmtComments->fetch();
+    
+    if (($tasksResult && $tasksResult['count'] > 0) || ($commentsResult && $commentsResult['count'] > 0)) {
         $lastChecked = time();
         echo "data: " . json_encode(['type' => 'tasks_updated', 'time' => $lastChecked]) . "\n\n";
     } else {

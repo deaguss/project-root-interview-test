@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { fetchApi } from '@/utils/api';
+import { useToast } from '@/contexts/ToastContext';
 
 interface DragDropUploadProps {
   taskId: number;
@@ -9,9 +9,9 @@ interface DragDropUploadProps {
 export default function DragDropUpload({ taskId, onUploadSuccess }: DragDropUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { showToast } = useToast();
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -23,56 +23,64 @@ export default function DragDropUpload({ taskId, onUploadSuccess }: DragDropUplo
     setIsDragging(false);
   };
 
-  const handleDrop = async (e: React.DragEvent) => {
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      await uploadFile(e.dataTransfer.files[0]);
+      uploadFile(e.dataTransfer.files[0]);
     }
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      await uploadFile(e.target.files[0]);
+      uploadFile(e.target.files[0]);
     }
   };
 
-  const uploadFile = async (file: File) => {
-    setError(null);
-    setSuccess(null);
+  const uploadFile = (file: File) => {
     setUploading(true);
+    setProgress(0);
 
     const formData = new FormData();
     formData.append('attachment', file);
 
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:8080/api/tasks/${taskId}/attachments`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData,
-      });
+    const xhr = new XMLHttpRequest();
+    const token = localStorage.getItem('token');
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Upload failed');
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const percent = Math.round((event.loaded / event.total) * 100);
+        setProgress(percent);
       }
+    };
 
-      setSuccess('File uploaded successfully!');
-      if (onUploadSuccess) onUploadSuccess();
-      
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
+    xhr.onload = () => {
       setUploading(false);
+      if (xhr.status >= 200 && xhr.status < 300) {
+        showToast('File uploaded successfully!', 'success');
+        if (onUploadSuccess) onUploadSuccess();
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      } else {
+        let msg = 'Upload failed';
+        try {
+          const res = JSON.parse(xhr.responseText);
+          if (res.message) msg = res.message;
+        } catch (e) {}
+        showToast(msg, 'error');
+      }
+    };
+
+    xhr.onerror = () => {
+      setUploading(false);
+      showToast('Network error occurred during upload', 'error');
+    };
+
+    xhr.open('POST', `http://localhost:8080/api/tasks/${taskId}/attachments`);
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     }
+    xhr.send(formData);
   };
 
   return (
@@ -81,18 +89,24 @@ export default function DragDropUpload({ taskId, onUploadSuccess }: DragDropUplo
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
+        onClick={() => !uploading && fileInputRef.current?.click()}
         style={{
           border: isDragging ? '2px dashed #000' : '2px dashed #ccc',
           background: isDragging ? '#f0f0f0' : '#fafafa',
           padding: '20px',
           textAlign: 'center',
-          cursor: 'pointer',
-          borderRadius: '4px'
+          cursor: uploading ? 'not-allowed' : 'pointer',
+          borderRadius: '4px',
+          position: 'relative'
         }}
       >
         {uploading ? (
-          <p>Uploading...</p>
+          <div>
+            <p>Uploading... {progress}%</p>
+            <div style={{ width: '100%', background: '#ddd', height: '5px', borderRadius: '3px', marginTop: '10px' }}>
+              <div style={{ width: `${progress}%`, background: '#28a745', height: '100%', borderRadius: '3px', transition: 'width 0.2s' }}></div>
+            </div>
+          </div>
         ) : (
           <p>Drag and drop a file here, or click to select</p>
         )}
@@ -103,9 +117,6 @@ export default function DragDropUpload({ taskId, onUploadSuccess }: DragDropUplo
           style={{ display: 'none' }} 
         />
       </div>
-      
-      {error && <p style={{ color: 'red', fontSize: '14px', marginTop: '5px' }}>{error}</p>}
-      {success && <p style={{ color: 'green', fontSize: '14px', marginTop: '5px' }}>{success}</p>}
     </div>
   );
 }

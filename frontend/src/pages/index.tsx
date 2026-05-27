@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { fetchApi } from '@/utils/api';
 import TaskForm from '@/components/TaskForm';
 import DragDropUpload from '@/components/DragDropUpload';
+import TaskComments from '@/components/TaskComments';
+import { useToast } from '@/contexts/ToastContext';
 
 export default function Dashboard() {
   const [tasks, setTasks] = useState<any[]>([]);
@@ -10,7 +12,28 @@ export default function Dashboard() {
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<any>(null);
   const [expandedTask, setExpandedTask] = useState<number | null>(null);
+  
+  // Filters
+  const [search, setSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterPriority, setFilterPriority] = useState('');
+
   const router = useRouter();
+  const { showToast } = useToast();
+
+  const loadTasks = useCallback(async () => {
+    try {
+      let query = `/tasks?per_page=50`;
+      if (search) query += `&search=${encodeURIComponent(search)}`;
+      if (filterStatus) query += `&status=${encodeURIComponent(filterStatus)}`;
+      if (filterPriority) query += `&priority=${encodeURIComponent(filterPriority)}`;
+
+      const res = await fetchApi(query);
+      setTasks(res.data.data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  }, [search, filterStatus, filterPriority]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -20,15 +43,11 @@ export default function Dashboard() {
       router.push('/login');
       return;
     }
-
-    if (userData) {
-      setUser(JSON.parse(userData));
-    }
+    if (userData) setUser(JSON.parse(userData));
 
     loadTasks();
 
     const eventSource = new EventSource('http://localhost:8081/sse.php');
-    
     eventSource.onmessage = (e) => {
       if (e.data !== 'ping') {
         try {
@@ -40,26 +59,14 @@ export default function Dashboard() {
       }
     };
 
-    return () => {
-      eventSource.close();
-    };
-  }, []);
-
-  const loadTasks = async () => {
-    try {
-      const res = await fetchApi('/tasks?per_page=50');
-      setTasks(res.data.data || []);
-    } catch (err) {
-      console.error(err);
-    }
-  };
+    return () => eventSource.close();
+  }, [loadTasks, router]);
 
   const handleLogout = async () => {
     try {
       await fetchApi('/auth/logout', { method: 'POST' });
-    } catch (err) {
-      console.error(err);
-    } finally {
+    } catch (err) {} 
+    finally {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       router.push('/login');
@@ -70,9 +77,10 @@ export default function Dashboard() {
     if (confirm('Are you sure you want to delete this task?')) {
       try {
         await fetchApi(`/tasks/${id}`, { method: 'DELETE' });
+        showToast('Task deleted successfully', 'success');
         loadTasks();
-      } catch (err) {
-        alert('Failed to delete');
+      } catch (err: any) {
+        showToast(err.message || 'Failed to delete', 'error');
       }
     }
   };
@@ -82,14 +90,8 @@ export default function Dashboard() {
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif', maxWidth: '1000px', margin: '0 auto' }}>
       <header style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        borderBottom: '1px solid #ccc', 
-        paddingBottom: '10px', 
-        marginBottom: '20px',
-        flexWrap: 'wrap',
-        gap: '10px'
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        borderBottom: '1px solid #ccc', paddingBottom: '10px', marginBottom: '20px', flexWrap: 'wrap', gap: '10px'
       }}>
         <h2 style={{ margin: 0 }}>Task Dashboard</h2>
         <div>
@@ -99,11 +101,33 @@ export default function Dashboard() {
       </header>
 
       <main>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-          <h3 style={{ margin: 0 }}>Your Tasks</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <input 
+              type="text" 
+              placeholder="Search tasks..." 
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+            />
+            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}>
+              <option value="">All Statuses</option>
+              <option value="pending">Pending</option>
+              <option value="in_progress">In Progress</option>
+              <option value="completed">Completed</option>
+            </select>
+            <select value={filterPriority} onChange={e => setFilterPriority(e.target.value)} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}>
+              <option value="">All Priorities</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+          
           <button 
             onClick={() => { setEditingTask(null); setShowForm(!showForm); }}
-            style={{ padding: '8px 15px', background: '#333', color: 'white', border: 'none', cursor: 'pointer' }}
+            style={{ padding: '8px 15px', background: '#333', color: 'white', border: 'none', cursor: 'pointer', borderRadius: '4px' }}
           >
             {showForm ? 'Close Form' : '+ New Task'}
           </button>
@@ -114,6 +138,7 @@ export default function Dashboard() {
             task={editingTask}
             onSuccess={() => {
               setShowForm(false);
+              showToast(editingTask ? 'Task updated' : 'Task created', 'success');
               loadTasks();
             }}
             onCancel={() => setShowForm(false)}
@@ -140,9 +165,7 @@ export default function Dashboard() {
                       <td style={{ padding: '10px', border: '1px solid #ccc' }}>{task.title}</td>
                       <td style={{ padding: '10px', border: '1px solid #ccc' }}>
                         <span style={{ 
-                          padding: '3px 8px', 
-                          borderRadius: '12px', 
-                          fontSize: '12px',
+                          padding: '3px 8px', borderRadius: '12px', fontSize: '12px',
                           background: task.status === 'completed' ? '#d4edda' : task.status === 'in_progress' ? '#fff3cd' : '#e2e3e5'
                         }}>
                           {task.status}
@@ -154,7 +177,7 @@ export default function Dashboard() {
                           onClick={() => setExpandedTask(expandedTask === task.id ? null : task.id)}
                           style={{ marginRight: '5px', padding: '4px 8px', cursor: 'pointer' }}
                         >
-                          {expandedTask === task.id ? 'Hide Details' : 'Details'}
+                          {expandedTask === task.id ? 'Hide' : 'Details'}
                         </button>
                         <button 
                           onClick={() => { setEditingTask(task); setShowForm(true); }}
@@ -180,6 +203,8 @@ export default function Dashboard() {
                             <strong>Attachments:</strong>
                             <DragDropUpload taskId={task.id} onUploadSuccess={loadTasks} />
                           </div>
+                          
+                          <TaskComments taskId={task.id} />
                         </td>
                       </tr>
                     )}

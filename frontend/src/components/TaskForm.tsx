@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { fetchApi } from '@/utils/api';
+import { useToast } from '@/contexts/ToastContext';
 
 interface TaskFormProps {
   task?: any;
@@ -14,6 +15,7 @@ export default function TaskForm({ task, onSuccess, onCancel }: TaskFormProps) {
   const [priority, setPriority] = useState(task?.priority || 'medium');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,7 +38,7 @@ export default function TaskForm({ task, onSuccess, onCancel }: TaskFormProps) {
       }
       onSuccess();
     } catch (err: any) {
-      setError(err.message);
+      showToast(err.message || 'An error occurred', 'error');
     } finally {
       setLoading(false);
     }
@@ -51,8 +53,6 @@ export default function TaskForm({ task, onSuccess, onCancel }: TaskFormProps) {
       marginBottom: '20px'
     }}>
       <h3 style={{ marginTop: 0 }}>{task ? 'Edit Task' : 'Create New Task'}</h3>
-      
-      {error && <p style={{ color: 'red' }}>{error}</p>}
       
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: '10px' }}>

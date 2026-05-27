@@ -4,6 +4,7 @@ use App\Core\Router;
 use App\Controllers\AuthController;
 use App\Controllers\TaskController;
 use App\Controllers\AttachmentController;
+use App\Controllers\CommentController;
 use App\Middleware\AuthMiddleware;
 
 $router = new Router();
@@ -23,5 +24,8 @@ $router->delete('/api/tasks/{id}', [TaskController::class, 'destroy'], [AuthMidd
 $router->post('/api/tasks/{id}/attachments', [AttachmentController::class, 'upload'], [AuthMiddleware::class]);
 $router->get('/api/attachments/{id}/download', [AttachmentController::class, 'download'], [AuthMiddleware::class]);
 $router->delete('/api/attachments/{id}', [AttachmentController::class, 'destroy'], [AuthMiddleware::class]);
+
+$router->get('/api/tasks/{id}/comments', [CommentController::class, 'index'], [AuthMiddleware::class]);
+$router->post('/api/tasks/{id}/comments', [CommentController::class, 'store'], [AuthMiddleware::class]);
 
 return $router;
