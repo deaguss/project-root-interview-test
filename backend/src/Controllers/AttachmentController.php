@@ -17,6 +17,17 @@ class AttachmentController
         $this->config = require __DIR__ . '/../../config/app.php';
     }
 
+    public function index(Request $request, array $params): void
+    {
+        $taskId = (int) $params['id'];
+
+        $stmt = $this->db->prepare('SELECT * FROM task_attachments WHERE task_id = :task_id ORDER BY uploaded_at DESC');
+        $stmt->execute(['task_id' => $taskId]);
+        $attachments = $stmt->fetchAll();
+
+        Response::success($attachments, 'Attachments retrieved');
+    }
+
     public function upload(Request $request, array $params): void
     {
         $taskId = (int) $params['id'];

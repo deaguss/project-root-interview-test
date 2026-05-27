@@ -4,6 +4,7 @@ import { fetchApi } from '@/utils/api';
 import TaskForm from '@/components/TaskForm';
 import DragDropUpload from '@/components/DragDropUpload';
 import TaskComments from '@/components/TaskComments';
+import TaskAttachments from '@/components/TaskAttachments';
 import { useToast } from '@/contexts/ToastContext';
 
 export default function Dashboard() {
@@ -12,6 +13,7 @@ export default function Dashboard() {
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<any>(null);
   const [expandedTask, setExpandedTask] = useState<number | null>(null);
+  const [uploadTick, setUploadTick] = useState(0);
   
   // Filters
   const [search, setSearch] = useState('');
@@ -201,7 +203,8 @@ export default function Dashboard() {
                           
                           <div style={{ marginTop: '15px' }}>
                             <strong>Attachments:</strong>
-                            <DragDropUpload taskId={task.id} onUploadSuccess={loadTasks} />
+                            <TaskAttachments taskId={task.id} refreshTrigger={uploadTick} />
+                            <DragDropUpload taskId={task.id} onUploadSuccess={() => setUploadTick(t => t + 1)} />
                           </div>
                           
                           <TaskComments taskId={task.id} />

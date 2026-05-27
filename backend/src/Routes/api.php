@@ -21,6 +21,7 @@ $router->post('/api/tasks', [TaskController::class, 'store'], [AuthMiddleware::c
 $router->put('/api/tasks/{id}', [TaskController::class, 'update'], [AuthMiddleware::class]);
 $router->delete('/api/tasks/{id}', [TaskController::class, 'destroy'], [AuthMiddleware::class]);
 
+$router->get('/api/tasks/{id}/attachments', [AttachmentController::class, 'index'], [AuthMiddleware::class]);
 $router->post('/api/tasks/{id}/attachments', [AttachmentController::class, 'upload'], [AuthMiddleware::class]);
 $router->get('/api/attachments/{id}/download', [AttachmentController::class, 'download'], [AuthMiddleware::class]);
 $router->delete('/api/attachments/{id}', [AttachmentController::class, 'destroy'], [AuthMiddleware::class]);
