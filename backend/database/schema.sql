@@ -4,6 +4,7 @@ CREATE DATABASE IF NOT EXISTS task_management
 
 USE task_management;
 
+
 CREATE TABLE users (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
