@@ -29,7 +29,7 @@ export default function Dashboard() {
       if (filterPriority) query += `&priority=${encodeURIComponent(filterPriority)}`;
 
       const res = await fetchApi(query);
-      setTasks(res.data.data || []);
+      setTasks(res.data.tasks || []);
     } catch (err) {
       console.error(err);
     }
