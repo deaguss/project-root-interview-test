@@ -3,7 +3,8 @@
     "description": "Task Management Platform API",
     "require": {
         "php": ">=7.4",
-        "firebase/php-jwt": "^6.0"
+        "firebase/php-jwt": "^6.0",
+        "cboden/ratchet": "^0.4.4"
     },
     "autoload": {
         "psr-4": {

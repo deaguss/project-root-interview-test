@@ -14,6 +14,8 @@ export default function Dashboard() {
   const [editingTask, setEditingTask] = useState<any>(null);
   const [expandedTask, setExpandedTask] = useState<number | null>(null);
   const [uploadTick, setUploadTick] = useState(0);
+  const [onlineUsers, setOnlineUsers] = useState<Record<number, string>>({});
+  const [ws, setWs] = useState<WebSocket | null>(null);
   
   // Filters
   const [search, setSearch] = useState('');
@@ -49,19 +51,22 @@ export default function Dashboard() {
 
     loadTasks();
 
-    const eventSource = new EventSource('http://localhost:8081/sse.php');
-    eventSource.onmessage = (e) => {
-      if (e.data !== 'ping') {
-        try {
-          const data = JSON.parse(e.data);
-          if (data.type === 'tasks_updated') {
-            loadTasks();
-          }
-        } catch (err) {}
-      }
+    const socket = new WebSocket(`ws://localhost:8081/?token=${token}`);
+    
+    socket.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type === 'tasks_updated') {
+          loadTasks();
+        } else if (data.type === 'presence') {
+          setOnlineUsers(data.users);
+        }
+      } catch (err) {}
     };
 
-    return () => eventSource.close();
+    setWs(socket);
+
+    return () => socket.close();
   }, [loadTasks, router]);
 
   const handleLogout = async () => {
@@ -155,6 +160,7 @@ export default function Dashboard() {
                 <th style={{ padding: '10px', border: '1px solid #ccc' }}>Title</th>
                 <th style={{ padding: '10px', border: '1px solid #ccc' }}>Status</th>
                 <th style={{ padding: '10px', border: '1px solid #ccc' }}>Priority</th>
+                <th style={{ padding: '10px', border: '1px solid #ccc' }}>Assigned To</th>
                 <th style={{ padding: '10px', border: '1px solid #ccc', width: '200px' }}>Actions</th>
               </tr>
             </thead>
@@ -174,6 +180,12 @@ export default function Dashboard() {
                         </span>
                       </td>
                       <td style={{ padding: '10px', border: '1px solid #ccc' }}>{task.priority}</td>
+                      <td style={{ padding: '10px', border: '1px solid #ccc' }}>
+                        {task.assigned_user_name || '-'}
+                        {task.assigned_user_id && onlineUsers[task.assigned_user_id] && (
+                          <span style={{ display: 'inline-block', width: '8px', height: '8px', background: '#28a745', borderRadius: '50%', marginLeft: '5px' }} title="Online"></span>
+                        )}
+                      </td>
                       <td style={{ padding: '10px', border: '1px solid #ccc' }}>
                         <button 
                           onClick={() => setExpandedTask(expandedTask === task.id ? null : task.id)}
@@ -198,7 +210,7 @@ export default function Dashboard() {
                     
                     {expandedTask === task.id && (
                       <tr>
-                        <td colSpan={5} style={{ padding: '15px', border: '1px solid #ccc', background: '#fafafa' }}>
+                        <td colSpan={6} style={{ padding: '15px', border: '1px solid #ccc', background: '#fafafa' }}>
                           <p><strong>Description:</strong> {task.description || 'No description'}</p>
                           
                           <div style={{ marginTop: '15px' }}>
@@ -207,7 +219,7 @@ export default function Dashboard() {
                             <DragDropUpload taskId={task.id} onUploadSuccess={() => setUploadTick(t => t + 1)} />
                           </div>
                           
-                          <TaskComments taskId={task.id} />
+                          <TaskComments taskId={task.id} ws={ws} />
                         </td>
                       </tr>
                     )}
@@ -215,7 +227,7 @@ export default function Dashboard() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} style={{ padding: '10px', border: '1px solid #ccc', textAlign: 'center' }}>
+                  <td colSpan={6} style={{ padding: '10px', border: '1px solid #ccc', textAlign: 'center' }}>
                     No tasks found
                   </td>
                 </tr>

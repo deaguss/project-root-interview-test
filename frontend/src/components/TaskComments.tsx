@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { fetchApi } from '@/utils/api';
 
 interface Comment {
@@ -12,32 +12,60 @@ interface Comment {
 
 interface TaskCommentsProps {
   taskId: number;
+  ws?: WebSocket | null;
 }
 
-export default function TaskComments({ taskId }: TaskCommentsProps) {
+export default function TaskComments({ taskId, ws }: TaskCommentsProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(false);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  
+  const typingTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
+  let debounceTimeout = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadComments();
     
-    const eventSource = new EventSource('http://localhost:8081/sse.php');
-    eventSource.onmessage = (e) => {
-      if (e.data !== 'ping') {
+    if (ws) {
+      const handleWsMessage = (e: MessageEvent) => {
         try {
           const data = JSON.parse(e.data);
-          if (data.type === 'tasks_updated') {
-            loadComments();
+          if (data.type === 'typing' && data.taskId === taskId) {
+            const userName = data.user.name;
+            setTypingUsers(prev => prev.includes(userName) ? prev : [...prev, userName]);
+            
+            if (typingTimeouts.current[userName]) {
+              clearTimeout(typingTimeouts.current[userName]);
+            }
+            
+            typingTimeouts.current[userName] = setTimeout(() => {
+              setTypingUsers(prev => prev.filter(n => n !== userName));
+            }, 3000);
+          } else if (data.type === 'stop_typing' && data.taskId === taskId) {
+            setTypingUsers(prev => prev.filter(n => n !== data.user.name));
           }
         } catch (err) {}
-      }
-    };
+      };
 
-    return () => {
-      eventSource.close();
-    };
-  }, [taskId]);
+      ws.addEventListener('message', handleWsMessage);
+      
+      return () => {
+        ws.removeEventListener('message', handleWsMessage);
+      };
+    }
+  }, [taskId, ws]);
+
+  const handleKeyDown = () => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'typing', taskId }));
+      
+      if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
+      debounceTimeout.current = setTimeout(() => {
+        ws.send(JSON.stringify({ type: 'stop_typing', taskId }));
+      }, 2000);
+    }
+  };
 
   const loadComments = async () => {
     try {
@@ -86,11 +114,15 @@ export default function TaskComments({ taskId }: TaskCommentsProps) {
         )}
       </div>
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px' }}>
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ width: '100%', minHeight: '20px', fontSize: '12px', color: '#666', fontStyle: 'italic' }}>
+          {typingUsers.length > 0 && `${typingUsers.join(', ')} ${typingUsers.length > 1 ? 'are' : 'is'} typing...`}
+        </div>
         <input 
           type="text" 
           value={newComment} 
           onChange={e => setNewComment(e.target.value)} 
+          onKeyDown={handleKeyDown}
           placeholder="Add a comment..."
           style={{ flex: 1, padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
         />
