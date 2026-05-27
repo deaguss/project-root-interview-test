@@ -1,0 +1,8 @@
+/vendor/
+/composer.phar
+/storage/*
+!/storage/.gitkeep
+/.phpunit.cache
+/phpunit.result.cache
+*.log
+.env
