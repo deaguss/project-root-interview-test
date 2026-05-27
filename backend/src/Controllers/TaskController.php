@@ -160,6 +160,7 @@ class TaskController
         }
 
         $authUser = $GLOBALS['auth_user'];
+        $assignedUserId = $request->input('assigned_user_id');
 
         $stmt = $this->db->prepare(
             'INSERT INTO tasks (title, description, status, priority, assigned_user_id, created_by, due_date)
@@ -171,12 +172,28 @@ class TaskController
             'description' => $request->input('description'),
             'status' => $request->input('status', 'pending'),
             'priority' => $request->input('priority', 'medium'),
-            'assigned_user_id' => $request->input('assigned_user_id'),
+            'assigned_user_id' => $assignedUserId,
             'created_by' => $authUser->sub,
             'due_date' => $request->input('due_date'),
         ]);
 
-        $task = $this->findTask($this->db->lastInsertId());
+        $taskId = $this->db->lastInsertId();
+        $task = $this->findTask($taskId);
+
+        if ($assignedUserId) {
+            $userStmt = $this->db->prepare('SELECT email, name FROM users WHERE id = :id');
+            $userStmt->execute(['id' => $assignedUserId]);
+            $assignedUser = $userStmt->fetch();
+
+            if ($assignedUser) {
+                $queue = new \App\Core\Queue();
+                $queue->push(\App\Jobs\EmailNotificationJob::class, [
+                    'to' => $assignedUser['email'],
+                    'subject' => "New Task Assigned: {$task['title']}",
+                    'message' => "Hello {$assignedUser['name']},\n\nYou have been assigned a new task: {$task['title']}.\nPriority: {$task['priority']}\nDue Date: {$task['due_date']}"
+                ]);
+            }
+        }
 
         Response::success($task, 'Task created', 201);
     }
@@ -189,12 +206,18 @@ class TaskController
         $bindings = ['id' => $task['id']];
 
         $updatable = ['title', 'description', 'status', 'priority', 'assigned_user_id', 'due_date'];
+        
+        $newAssignedUser = null;
 
         foreach ($updatable as $field) {
             $value = $request->input($field);
             if ($value !== null) {
                 $fields[] = "{$field} = :{$field}";
                 $bindings[$field] = $value;
+                
+                if ($field === 'assigned_user_id' && $value != $task['assigned_user_id']) {
+                    $newAssignedUser = $value;
+                }
             }
         }
 
@@ -207,6 +230,21 @@ class TaskController
         $stmt->execute($bindings);
 
         $updatedTask = $this->findTask($params['id']);
+
+        if ($newAssignedUser) {
+            $userStmt = $this->db->prepare('SELECT email, name FROM users WHERE id = :id');
+            $userStmt->execute(['id' => $newAssignedUser]);
+            $assignedUser = $userStmt->fetch();
+
+            if ($assignedUser) {
+                $queue = new \App\Core\Queue();
+                $queue->push(\App\Jobs\EmailNotificationJob::class, [
+                    'to' => $assignedUser['email'],
+                    'subject' => "Task Assigned: {$updatedTask['title']}",
+                    'message' => "Hello {$assignedUser['name']},\n\nYou have been assigned to task: {$updatedTask['title']}.\nStatus: {$updatedTask['status']}"
+                ]);
+            }
+        }
 
         Response::success($updatedTask, 'Task updated');
     }
