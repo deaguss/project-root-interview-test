@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { fetchApi } from '@/utils/api';
+import TaskForm from '@/components/TaskForm';
+import DragDropUpload from '@/components/DragDropUpload';
 
 export default function Dashboard() {
   const [tasks, setTasks] = useState<any[]>([]);
   const [user, setUser] = useState<any>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingTask, setEditingTask] = useState<any>(null);
+  const [expandedTask, setExpandedTask] = useState<number | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -21,11 +26,28 @@ export default function Dashboard() {
     }
 
     loadTasks();
+
+    const eventSource = new EventSource('http://localhost:8081/sse.php');
+    
+    eventSource.onmessage = (e) => {
+      if (e.data !== 'ping') {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.type === 'tasks_updated') {
+            loadTasks();
+          }
+        } catch (err) {}
+      }
+    };
+
+    return () => {
+      eventSource.close();
+    };
   }, []);
 
   const loadTasks = async () => {
     try {
-      const res = await fetchApi('/tasks');
+      const res = await fetchApi('/tasks?per_page=50');
       setTasks(res.data.data || []);
     } catch (err) {
       console.error(err);
@@ -44,48 +66,135 @@ export default function Dashboard() {
     }
   };
 
+  const handleDelete = async (id: number) => {
+    if (confirm('Are you sure you want to delete this task?')) {
+      try {
+        await fetchApi(`/tasks/${id}`, { method: 'DELETE' });
+        loadTasks();
+      } catch (err) {
+        alert('Failed to delete');
+      }
+    }
+  };
+
   if (!user) return <div style={{ padding: '20px' }}>Loading...</div>;
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #ccc', paddingBottom: '10px', marginBottom: '20px' }}>
-        <h2>Task Dashboard</h2>
+    <div style={{ padding: '20px', fontFamily: 'sans-serif', maxWidth: '1000px', margin: '0 auto' }}>
+      <header style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        borderBottom: '1px solid #ccc', 
+        paddingBottom: '10px', 
+        marginBottom: '20px',
+        flexWrap: 'wrap',
+        gap: '10px'
+      }}>
+        <h2 style={{ margin: 0 }}>Task Dashboard</h2>
         <div>
           <span style={{ marginRight: '15px' }}>Welcome, {user.name}</span>
-          <button onClick={handleLogout}>Logout</button>
+          <button onClick={handleLogout} style={{ padding: '5px 10px', cursor: 'pointer' }}>Logout</button>
         </div>
       </header>
 
       <main>
-        <h3>Your Tasks</h3>
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px' }}>
-          <thead>
-            <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
-              <th style={{ padding: '10px', border: '1px solid #ccc' }}>ID</th>
-              <th style={{ padding: '10px', border: '1px solid #ccc' }}>Title</th>
-              <th style={{ padding: '10px', border: '1px solid #ccc' }}>Status</th>
-              <th style={{ padding: '10px', border: '1px solid #ccc' }}>Priority</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tasks.length > 0 ? (
-              tasks.map(task => (
-                <tr key={task.id}>
-                  <td style={{ padding: '10px', border: '1px solid #ccc' }}>{task.id}</td>
-                  <td style={{ padding: '10px', border: '1px solid #ccc' }}>{task.title}</td>
-                  <td style={{ padding: '10px', border: '1px solid #ccc' }}>{task.status}</td>
-                  <td style={{ padding: '10px', border: '1px solid #ccc' }}>{task.priority}</td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={4} style={{ padding: '10px', border: '1px solid #ccc', textAlign: 'center' }}>
-                  No tasks found
-                </td>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+          <h3 style={{ margin: 0 }}>Your Tasks</h3>
+          <button 
+            onClick={() => { setEditingTask(null); setShowForm(!showForm); }}
+            style={{ padding: '8px 15px', background: '#333', color: 'white', border: 'none', cursor: 'pointer' }}
+          >
+            {showForm ? 'Close Form' : '+ New Task'}
+          </button>
+        </div>
+
+        {showForm && (
+          <TaskForm 
+            task={editingTask}
+            onSuccess={() => {
+              setShowForm(false);
+              loadTasks();
+            }}
+            onCancel={() => setShowForm(false)}
+          />
+        )}
+
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
+            <thead>
+              <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
+                <th style={{ padding: '10px', border: '1px solid #ccc' }}>ID</th>
+                <th style={{ padding: '10px', border: '1px solid #ccc' }}>Title</th>
+                <th style={{ padding: '10px', border: '1px solid #ccc' }}>Status</th>
+                <th style={{ padding: '10px', border: '1px solid #ccc' }}>Priority</th>
+                <th style={{ padding: '10px', border: '1px solid #ccc', width: '200px' }}>Actions</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {tasks.length > 0 ? (
+                tasks.map(task => (
+                  <React.Fragment key={task.id}>
+                    <tr>
+                      <td style={{ padding: '10px', border: '1px solid #ccc' }}>{task.id}</td>
+                      <td style={{ padding: '10px', border: '1px solid #ccc' }}>{task.title}</td>
+                      <td style={{ padding: '10px', border: '1px solid #ccc' }}>
+                        <span style={{ 
+                          padding: '3px 8px', 
+                          borderRadius: '12px', 
+                          fontSize: '12px',
+                          background: task.status === 'completed' ? '#d4edda' : task.status === 'in_progress' ? '#fff3cd' : '#e2e3e5'
+                        }}>
+                          {task.status}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px', border: '1px solid #ccc' }}>{task.priority}</td>
+                      <td style={{ padding: '10px', border: '1px solid #ccc' }}>
+                        <button 
+                          onClick={() => setExpandedTask(expandedTask === task.id ? null : task.id)}
+                          style={{ marginRight: '5px', padding: '4px 8px', cursor: 'pointer' }}
+                        >
+                          {expandedTask === task.id ? 'Hide Details' : 'Details'}
+                        </button>
+                        <button 
+                          onClick={() => { setEditingTask(task); setShowForm(true); }}
+                          style={{ marginRight: '5px', padding: '4px 8px', cursor: 'pointer' }}
+                        >
+                          Edit
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(task.id)}
+                          style={{ padding: '4px 8px', background: '#dc3545', color: 'white', border: 'none', cursor: 'pointer' }}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                    
+                    {expandedTask === task.id && (
+                      <tr>
+                        <td colSpan={5} style={{ padding: '15px', border: '1px solid #ccc', background: '#fafafa' }}>
+                          <p><strong>Description:</strong> {task.description || 'No description'}</p>
+                          
+                          <div style={{ marginTop: '15px' }}>
+                            <strong>Attachments:</strong>
+                            <DragDropUpload taskId={task.id} onUploadSuccess={loadTasks} />
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} style={{ padding: '10px', border: '1px solid #ccc', textAlign: 'center' }}>
+                    No tasks found
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </main>
     </div>
   );
